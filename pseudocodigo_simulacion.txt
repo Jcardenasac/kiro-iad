@@ -1,5 +1,9 @@
 PSEUDOCODIGO - SIMULACION DE SOBREVENTA DEL VUELO
 
+Juan Diego Cardenas Acevedo 
+jcardenasac@unal.edu.co
+CC 1018231065
+
 Inicio
 
 1. Definir cuantas sillas se van a ofrecer en total y que porcentaje
