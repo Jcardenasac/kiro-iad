@@ -1,118 +1,48 @@
-PSEUDOCODIGO - MODELO DE SIMULACION DE SOBREVENTA (VUELO 343 PIEDMONT)
-========================================================================
+PSEUDOCODIGO - SIMULACION DE SOBREVENTA DEL VUELO
 
-Parte 2 del taller: este pseudocodigo describe el funcionamiento del
-modelo de simulacion usado en "ESTUDIANTES_Taller_red_neuronal_calculo_
-demanda_Optimizacion_vector (1).ipynb" (seccion "SIMULACION DE MONTECARLO").
+Inicio
 
-Las redes neuronales (modelo_demanda_plena y modelo_demanda_economica)
-ya estan entrenadas de antemano. Aqui solo se USAN para predecir la
-demanda dentro de cada iteracion; el entrenamiento no es parte de este
-flujo.
+1. Definir cuantas sillas se van a ofrecer en total y que porcentaje
+   de esas sillas sera de tarifa plena (el resto es tarifa economica).
 
+2. Repetir muchas veces (una simulacion por repeticion):
 
-ENTRADAS FIJAS DEL ESCENARIO
------------------------------
-  capacidad_avion              = 112                 (sillas del avion)
-  estacion_climatica           = valor fijo (1..4)   (contexto del vuelo)
-  etapa_del_dia                = valor fijo (1..4)   (contexto del vuelo)
-  total_sillas_ofrecidas       (variable de decision del GA)
-  porcentaje_tarifa_plena      (variable de decision del GA)
-  numero_simulaciones          = N                   (iteraciones Monte Carlo)
+   a. Generar al azar el precio de la competencia para tarifa plena
+      y para tarifa economica.
 
-  modelo_demanda_plena,     scaler_plena,     columnas_modelo_plena
-  modelo_demanda_economica, scaler_economica, columnas_modelo_economica
-      (redes neuronales ya entrenadas, se reciben como entrada del
-       proceso; no se entrenan aqui)
+   b. Usar las redes neuronales ya entrenadas para predecir, a partir
+      de esos precios, cuantos pasajeros van a demandar tarifa plena
+      y cuantos tarifa economica. (Aqui solo se usan los modelos, no
+      se entrenan de nuevo).
 
+   c. Generar al azar las demas variables que influyen en el resultado:
+      que porcentaje de los pasajeros que compraron realmente se
+      presentan a viajar, cuanto pagan por el tiquete, y cuanto cuesta
+      indemnizar a un pasajero que se queda en tierra.
 
-FUNCION: simular_un_escenario(total_sillas_ofrecidas, porcentaje_tarifa_plena)
--------------------------------------------------------------------------------
-  Para i = 1 hasta N:                          # una iteracion Monte Carlo
+   d. Calcular cuantos tiquetes se venden realmente en cada tarifa,
+      comparando la oferta de sillas contra la demanda predicha.
 
-      1. GENERAR VARIABLES ALEATORIAS DE ENTRADA
-         precio_competencia_plena      ~ Normal(400, 50)
-         precio_competencia_economica  ~ Normal(200, 40)
-         asistencia_plena              ~ Normal(0.70, 0.15) truncada en [0,1]
-         asistencia_economica          ~ Normal(0.80, 0.10) truncada en [0,1]
-         precio_tiquete_plena          ~ BetaGeneral(1.6291, 1.1844, 252.17, 498.85)
-         precio_tiquete_economica      ~ Logistic(232.296, 31.305)
-         costo_compensacion_plena      ~ Triangular(494.71, 549, 719.57)
-         costo_compensacion_economica  ~ Weibull(1.7313, 137.44, desplazamiento 214.96)
+   e. Calcular cuantos pasajeros de los que compraron se presentan a
+      viajar. Los de tarifa plena abordan primero porque tienen
+      prioridad; los de tarifa economica abordan despues, en las
+      sillas que quedaron libres.
 
-      2. PREDECIR DEMANDA CON LAS REDES NEURONALES YA ENTRENADAS
-         # No se entrena nada aqui: solo se llama .predict() del modelo
-         demanda_plena = predecir_demanda_plena_vuelo(
-             estacion_climatica, etapa_del_dia,
-             precio_competencia_plena, precio_competencia_economica
-         )
-         demanda_economica = predecir_demanda_economica_vuelo(
-             estacion_climatica, etapa_del_dia,
-             precio_competencia_plena, precio_competencia_economica
-         )
+   f. Si llegaron mas pasajeros de los que cupieron en el avion, esos
+      se quedan en tierra y hay que indemnizarlos.
 
-      3. OFERTA DE SILLAS POR TARIFA
-         oferta_plena     = redondear(total_sillas_ofrecidas * porcentaje_tarifa_plena)
-         oferta_economica = total_sillas_ofrecidas - oferta_plena
+   g. Calcular la utilidad de esa repeticion: lo que se gano vendiendo
+      tiquetes y cobrando multas a quienes no se presentaron, menos lo
+      que se pago en indemnizaciones.
 
-      4. VENTAS REALES (limitadas por la demanda predicha)
-         venta_plena     = minimo(oferta_plena,     demanda_plena)
-         venta_economica = minimo(oferta_economica, demanda_economica)
+3. Al terminar todas las repeticiones, promediar la utilidad obtenida
+   en cada una. Ese promedio es el resultado esperado para la cantidad
+   de sillas y el porcentaje de tarifa plena que se definieron en el
+   paso 1.
 
-      5. PASAJEROS QUE EFECTIVAMENTE LLEGAN AL AEROPUERTO
-         llegan_plena     = redondear(venta_plena     * asistencia_plena)
-         llegan_economica = redondear(venta_economica * asistencia_economica)
+4. Probar distintas combinaciones de sillas ofrecidas y porcentaje de
+   tarifa plena (esto lo hace el algoritmo genetico de forma
+   automatica), repitiendo los pasos 2 y 3 para cada combinacion, hasta
+   encontrar la que deja la mayor utilidad esperada.
 
-      6. ABORDAJE (la tarifa plena tiene prelacion sobre la economica)
-         viajan_plena              = minimo(llegan_plena, capacidad_avion)
-         sillas_disponibles_eco    = capacidad_avion - viajan_plena
-         viajan_economica          = minimo(llegan_economica, sillas_disponibles_eco)
-
-      7. PASAJEROS QUE QUEDAN EN TIERRA (llegaron pero no cupieron)
-         en_tierra_plena     = maximo(0, llegan_plena     - viajan_plena)
-         en_tierra_economica = maximo(0, llegan_economica - viajan_economica)
-
-      8. PASAJEROS DE ECONOMICA QUE COMPRARON PERO NO SE PRESENTARON
-         no_show_economica = maximo(0, venta_economica - llegan_economica)
-
-      9. INGRESOS
-         ingreso_plena = viajan_plena * precio_tiquete_plena
-         ingreso_economica = viajan_economica * precio_tiquete_economica
-                              + no_show_economica * 0.5 * precio_tiquete_economica
-                              # el 0.5 es la multa (50%) por no presentarse
-
-     10. COSTOS DE INDEMNIZACION (pasajeros que quedaron en tierra)
-         costo_indemnizacion = en_tierra_plena     * costo_compensacion_plena
-                              + en_tierra_economica * costo_compensacion_economica
-
-     11. UTILIDAD NETA DE LA ITERACION i
-         utilidad_neta[i] = ingreso_plena + ingreso_economica - costo_indemnizacion
-
-  Fin para
-
-  retornar utilidad_neta[1..N]       # vector con la utilidad de cada iteracion
-
-
-FUNCION OBJETIVO (para el algoritmo genetico)
------------------------------------------------
-  funcion_objetivo(total_sillas_ofrecidas, porcentaje_tarifa_plena):
-      utilidades = simular_un_escenario(total_sillas_ofrecidas, porcentaje_tarifa_plena)
-      retornar  -promedio(utilidades)   # negativo porque el GA minimiza
-
-
-FLUJO COMPLETO DEL CASO
---------------------------
-  1. Cargar modelo_demanda_plena, modelo_demanda_economica y sus scalers
-     (ya entrenados previamente; ver seccion de entrenamiento del notebook).
-  2. Definir estacion_climatica y etapa_del_dia fijas para el analisis.
-  3. Ejecutar el algoritmo genetico:
-       para cada candidato (total_sillas_ofrecidas, porcentaje_tarifa_plena)
-       que propone el GA, evaluar funcion_objetivo(...), que internamente
-       corre N iteraciones de simular_un_escenario(...).
-  4. Al terminar el GA, tomar la mejor combinacion encontrada
-     (sillas_optimas, porcentaje_plena_optimo).
-  5. Volver a correr simular_un_escenario(sillas_optimas, porcentaje_plena_optimo)
-     con un numero grande de iteraciones para obtener media, desviacion
-     estandar y percentiles de la utilidad neta de la solucion optima.
-  6. Comparar esa solucion contra escenarios de referencia (p. ej. sin
-     sobreventa) para contextualizar la mejora.
+Fin
